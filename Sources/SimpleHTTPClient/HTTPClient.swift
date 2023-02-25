@@ -4,12 +4,16 @@ public final class HTTPClient {
     public init(
         baseURL: String,
         commonHeaders: [(String, String)] = [],
-        dataLoader: DataLoader = .init()
+        dataLoader: DataLoader = .init(),
+        errorResponseHandler: ErrorResponseHandler? = nil
     ) {
         self.baseURL = baseURL
         headers = commonHeaders
         self.dataLoader = dataLoader
+        self.errorResponseHandler = errorResponseHandler
     }
+
+    public typealias ErrorResponseHandler = (Data, HTTPURLResponse, JSONDecoder) throws -> String
 
     enum HTTPMethod: String {
         case GET, POST, PUT, PATCH, DELETE
@@ -20,6 +24,7 @@ public final class HTTPClient {
     private let dataLoader: DataLoader
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private let errorResponseHandler: ErrorResponseHandler?
 
     private struct Empty: Decodable {}
 
@@ -149,7 +154,13 @@ public final class HTTPClient {
                 throw error
             }
         default:
-            throw ResponseError(statusCode: response.statusCode, message: response.description)
+            let message: String = try {
+                guard let handler = errorResponseHandler else {
+                    return response.description
+                }
+                return try handler(data, response, decoder)
+            }()
+            throw ResponseError(statusCode: response.statusCode, message: message)
         }
     }
 }
