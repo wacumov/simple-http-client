@@ -1,11 +1,30 @@
 import Foundation
 
+public protocol DataLoaderAuthDelegate: AnyObject {
+    func authorize(_ request: inout URLRequest) async throws
+    func isUnauthorized(_ response: HTTPURLResponse) -> Bool
+    func refreshToken() async throws
+}
+
+public extension DataLoaderAuthDelegate {
+    func isUnauthorized(_ response: HTTPURLResponse) -> Bool {
+        response.statusCode == 401
+    }
+}
+
 public final class DataLoader {
+    public weak var authDelegate: DataLoaderAuthDelegate?
+
     public init() {}
 
     private let session = URLSession.shared
 
-    func loadData(_ request: URLRequest, allowRetry: Bool = true) async throws -> (Data, HTTPURLResponse) {
+    func loadData(_ urlRequest: URLRequest, allowRetry: Bool = true) async throws -> (Data, HTTPURLResponse) {
+        var request = urlRequest
+        if let authDelegate {
+            try await authDelegate.authorize(&request)
+        }
+
         #if DEBUG
         printRequest(request)
         #endif
@@ -19,6 +38,11 @@ public final class DataLoader {
         #if DEBUG
         printResponse(httpResponse, request: request, data: data)
         #endif
+
+        if allowRetry, let delegate = authDelegate, delegate.isUnauthorized(httpResponse) {
+            try await delegate.refreshToken()
+            return try await loadData(urlRequest, allowRetry: false)
+        }
 
         return (data, httpResponse)
     }
