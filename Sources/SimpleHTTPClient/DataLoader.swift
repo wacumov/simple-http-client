@@ -51,30 +51,36 @@ public final class DataLoader {
     private func printRequest(_ request: URLRequest) {
         printKeyedValues([
             (request.httpMethod!, request.url!.absoluteString),
-        ], andJson: {
-            guard let body = request.httpBody else {
-                return nil
-            }
-            return try? JSONSerialization.jsonObject(with: body)
-        }())
+        ], andJson: request.httpBody)
     }
 
     private func printResponse(_ response: HTTPURLResponse, request: URLRequest, data: Data) {
         printKeyedValues([
             (request.httpMethod!, request.url!.absoluteString),
             ("response.statusCode", "\(response.statusCode)"),
-        ], andJson: try? JSONSerialization.jsonObject(with: data))
+        ], andJson: data)
     }
 
-    private func printKeyedValues(_ keyedValues: [(String, String)], andJson json: Any?) {
+    private func printKeyedValues(_ keyedValues: [(String, String)], andJson data: Data?) {
         print("===")
         for (key, value) in keyedValues {
             print("\(key): \(value)")
         }
-        if let json {
+        if let json = data?.json {
             print(json)
         }
         print("===")
     }
     #endif
 }
+
+#if DEBUG
+private extension Data {
+    var json: String? {
+        guard let json = try? JSONSerialization.jsonObject(with: self), let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+}
+#endif
